@@ -101,7 +101,7 @@ if st.button("🚀 블로그에 글 & 사진 2장 바로 등록하기", type="pr
 
                 client = genai.Client(api_key=api_key)
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-3.6-flash",
                     contents=prompt
                 )
                 full_text = response.text

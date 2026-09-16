@@ -27,7 +27,14 @@ if not all([api_key, sender_email, app_password, blogger_email, unsplash_key]):
 if "post_data" not in st.session_state:
     st.session_state.post_data = None
 
-# Unsplash 고화질 실제 사진 검색 함수
+# 스팸 필터에 걸리지 않도록 URL을 정제하는 함수
+def clean_unsplash_url(raw_url):
+    if "?" in raw_url:
+        base = raw_url.split("?")[0]
+        return f"{base}?w=800&q=80"
+    return raw_url
+
+# Unsplash 고화질 사진 검색 함수
 def get_unsplash_photo(query_keyword, page=1):
     try:
         url = "https://api.unsplash.com/search/photos"
@@ -42,13 +49,12 @@ def get_unsplash_photo(query_keyword, page=1):
         if res.status_code == 200:
             data = res.json()
             if data.get("results"):
-                # 선명하고 적당한 용량의 regular 사이즈 URL 반환
-                return data["results"][0]["urls"]["regular"]
+                raw_link = data["results"][0]["urls"]["regular"]
+                return clean_unsplash_url(raw_link)
     except Exception:
         pass
-    # 키워드 검색 실패 시 기본 캐나다 라이프스타일 사진 fallback
     fallback_seed = random.randint(1, 100)
-    return f"https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=1000&auto=format&fit=crop&q=80&sig={fallback_seed}"
+    return f"https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=800&q=80&sig={fallback_seed}"
 
 # --- [1단계: 글 재료 입력하기] ---
 st.markdown("### 📝 1단계: 글 재료 입력하기")
@@ -71,13 +77,13 @@ topic = st.text_input(
 
 source_content = st.text_area(
     "3. 📰 참고할 기사나 다른 글 내용 (선택: 복사해서 붙여넣기)",
-    placeholder="뉴스 기사, IT 소식, 정부 공지문, 칼럼 등 자유롭게 복사해 붙여넣으세요.\n(AI가 핵심 팩트를 추출해 읽기 편한 친근한 글로 재가공합니다)",
+    placeholder="뉴스 기사, IT 소식, 정부 공지문, 칼럼 등 자유롭게 복사해 붙여넣으세요.",
     height=120
 )
 
 experience = st.text_area(
     "4. 💡 엄마의 실제 생각이나 한마디 (선택)", 
-    placeholder="예: 뉴스 보면서 세상이 참 빠르다고 느낌 / 지인이 이거 쓰고 편하다고 했음\n(비워두셔도 자연스럽게 글이 완성됩니다)",
+    placeholder="예: 뉴스 보면서 세상이 참 빠르다고 느낌 / 지인이 이거 쓰고 편하다고 했음",
     height=80
 )
 
@@ -114,7 +120,7 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
 
                 [작성 가이드]
                 1. 첫 번째 줄은 반드시 "TITLE: [주제에 맞고 매력적인 한글 블로그 제목]" 형식으로 시작하세요.
-                2. 어조: 다정하고 명쾌한 어조 (~해요, ~했답니다). 어려운 전문 용어나 기술 뉴스도 누구나 쉽게 이해할 수 있게 설명하세요.
+                2. 어조: 다정하고 명쾌한 어조 (~해요, ~했답니다).
                 3. 구성:
                    - 도입부: 이 주제나 뉴스를 접하고 든 생각, 흥미로운 공감 질문
                    - 본문 문단 1 (핵심 이슈 및 쉬운 설명)
@@ -122,8 +128,8 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                    - 본문 문단 2, 3 (우리가 주목할 점, 일상이나 실생활에 주는 영향)
                    - 맺음말: 독자들에게 건네는 따뜻한 소감과 질문
                 4. 글 맨 마지막 두 줄에는 Unsplash 검색용 간결한 영어 단어/키워드(2~3단어)를 아래 형식으로 적으세요:
-                   THUMBNAIL_KEYWORD: [글 전체 분위기를 표현하는 간결한 영어 검색어 2~3단어, 예: artificial intelligence laptop, canadian winter cozy, grocery shopping]
-                   BODY_KEYWORD: [본문 세부 내용과 관련된 간결한 영어 검색어 2~3단어, 예: office paperwork desk, computer code screen, supermarket shelves]
+                   THUMBNAIL_KEYWORD: [글 전체 분위기를 표현하는 간결한 영어 검색어 2~3단어]
+                   BODY_KEYWORD: [본문 세부 내용과 관련된 간결한 영어 검색어 2~3단어]
                 """
 
                 client = genai.Client(api_key=api_key)
@@ -133,7 +139,6 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 )
                 full_text = response.text.strip()
 
-                # 1) 제목 추출
                 post_title = topic
                 if "TITLE:" in full_text:
                     parts = full_text.split("TITLE:", 1)[1].split("\n", 1)
@@ -142,7 +147,6 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 else:
                     main_content = full_text
 
-                # 2) Unsplash 검색 키워드 추출
                 thumb_kw = "canada lifestyle"
                 body_kw = "workspace desk"
 
@@ -161,7 +165,6 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 if not final_body:
                     final_body = full_text
 
-                # 3) Unsplash 고화질 사진 호출 (초기 1페이지)
                 thumb_url = get_unsplash_photo(thumb_kw, page=1)
                 body_url = get_unsplash_photo(body_kw, page=1)
 
@@ -183,16 +186,14 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
 if st.session_state.post_data:
     st.divider()
     st.markdown("### 🔍 2단계: 엄마의 검토 및 사진 확인 (Review)")
-    st.info("💡 글과 사진을 확인해 보세요. 사진이 마음에 안 들면 **[🔄 다른 사진 찾기]**를 누르면 같은 주제의 다른 실제 사진으로 바뀝니다!")
+    st.info("💡 글과 사진을 확인해 보세요. 사진이 마음에 안 들면 **[🔄 다른 사진 찾기]**를 누르고, 마음에 들면 아래 **[최종 발행하기]**를 누르세요!")
 
-    # 1. 제목 수정
     reviewed_title = st.text_input(
         "블로그 제목 확인/수정", 
         value=st.session_state.post_data["title"]
     )
 
-    # 2. 이미지 미리보기 및 다른 사진 뽑기
-    st.markdown("##### 🖼️ 삽입될 고화질 실제 스톡 사진 (Unsplash)")
+    st.markdown("##### 🖼️ 삽입될 고화질 실제 스톡 사진")
     col1, col2 = st.columns(2)
     
     with col1:
@@ -219,27 +220,21 @@ if st.session_state.post_data:
             st.session_state.post_data["body_url"] = new_url
             st.rerun()
 
-    # 3. 본문 수정
     reviewed_body = st.text_area(
-        "본문 내용 확인/수정 (문장을 직접 추가하거나 고치실 수 있습니다)", 
+        "본문 내용 확인/수정", 
         value=st.session_state.post_data["body"],
         height=350
     )
 
-    # 4. 최종 발행 버튼
     col_send, col_cancel = st.columns([3, 1])
     with col_send:
         if st.button("🚀 검토 완료! 블로그에 최종 발행하기", type="primary", use_container_width=True):
-            with st.spinner("블로그에 최종 글과 고화질 사진을 등록하고 있습니다..."):
+            with st.spinner("구글 스팸 필터를 우회하여 안전하게 발행 중입니다..."):
                 try:
                     thumb_url = st.session_state.post_data["thumb_url"]
                     body_url = st.session_state.post_data["body_url"]
 
-                    body_img_html = f"""
-                    <div style="text-align: center; margin: 30px 0;">
-                        <img src="{body_url}" style="width: 100%; max-width: 750px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);" alt="관련 사진" />
-                    </div>
-                    """
+                    body_img_html = f'<p style="text-align:center; margin:25px 0;"><img src="{body_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="본문 이미지"></p>'
 
                     if "[INSERT_BODY_IMAGE]" in reviewed_body:
                         html_body_text = reviewed_body.replace("[INSERT_BODY_IMAGE]", body_img_html)
@@ -247,20 +242,21 @@ if st.session_state.post_data:
                         html_body_text = reviewed_body + body_img_html
 
                     formatted_body = html_body_text.strip().replace("\n", "<br>")
-                    final_html = f"""
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.85; font-size: 16px; color: #333;">
-                        <div style="text-align: center; margin-bottom: 25px;">
-                            <img src="{thumb_url}" style="width: 100%; max-width: 800px; border-radius: 10px;" alt="대표 사진" />
-                        </div>
-                        {formatted_body}
-                    </div>
-                    """
+                    
+                    final_html = f"""<html><body><div style="font-family: sans-serif; line-height: 1.8; font-size: 16px; color: #222;"><p style="text-align:center; margin-bottom:20px;"><img src="{thumb_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="대표 이미지"></p>{formatted_body}</div></body></html>"""
 
-                    msg = MIMEMultipart()
+                    # 구글 스팸 필터를 통과하기 위한 multipart/alternative 표준 포맷
+                    msg = MIMEMultipart('alternative')
                     msg['Subject'] = reviewed_title
                     msg['From'] = sender_email
                     msg['To'] = blogger_email
-                    msg.attach(MIMEText(final_html, 'html', 'utf-8'))
+
+                    plain_text = reviewed_body.replace("[INSERT_BODY_IMAGE]", "")
+                    part1 = MIMEText(plain_text, 'plain', 'utf-8')
+                    part2 = MIMEText(final_html, 'html', 'utf-8')
+
+                    msg.attach(part1)
+                    msg.attach(part2)
 
                     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
                         server.login(sender_email, app_password)

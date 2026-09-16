@@ -1,6 +1,6 @@
 import streamlit as st
 from google import genai
-import urllib.parse
+import requests
 import smtplib
 import random
 from email.mime.multipart import MIMEMultipart
@@ -9,28 +9,46 @@ from email.mime.text import MIMEText
 st.set_page_config(page_title="YoungMom Canada 블로그 비서", page_icon="🍁", layout="centered")
 
 st.title("🍁 YoungMom Canada 글 생성기")
-st.caption("뉴스, 시사, 캐나다 일상 등 어떤 이야기든 엄마만의 감성 글로 풀어내고 검토 후 등록하세요.")
+st.caption("고화질 실제 스톡 사진과 함께 글을 완성하고, 꼼꼼히 검토한 뒤 블로그에 등록하세요.")
+st.link_button("📊 내 블로그 방문자 통계 보러가기", "https://www.blogger.com/go/stats")
 
 # 1. 환경 변수(Secrets) 연동
 api_key = st.secrets.get("GEMINI_API_KEY")
 sender_email = st.secrets.get("SENDER_EMAIL")
 app_password = st.secrets.get("GMAIL_APP_PASSWORD")
 blogger_email = st.secrets.get("BLOGGER_EMAIL")
+unsplash_key = st.secrets.get("UNSPLASH_ACCESS_KEY")
 
-if not all([api_key, sender_email, app_password, blogger_email]):
-    st.error("Streamlit Secrets에 필수 설정(API 키, 이메일 정보)이 누락되었습니다.")
+if not all([api_key, sender_email, app_password, blogger_email, unsplash_key]):
+    st.error("Streamlit Secrets에 필수 설정(API 키, 이메일, Unsplash 키 등)이 누락되었습니다.")
     st.stop()
 
 # 2. 세션 상태 초기화
 if "post_data" not in st.session_state:
     st.session_state.post_data = None
 
-# 고화질 실사 사진 URL 생성 함수 (Flux 모델)
-def generate_flux_image_url(prompt_text, width, height, seed):
-    camera_style = ", authentic editorial lifestyle photography, shot on 35mm lens, soft natural lighting, cozy tone, realistic texture, 8k resolution, highly detailed, photorealistic, no 3d render, no cgi, no text, no watermark"
-    enhanced_prompt = prompt_text + camera_style
-    encoded = urllib.parse.quote(enhanced_prompt)
-    return f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&model=flux&nologo=true&seed={seed}"
+# Unsplash 고화질 실제 사진 검색 함수
+def get_unsplash_photo(query_keyword, page=1):
+    try:
+        url = "https://api.unsplash.com/search/photos"
+        params = {
+            "query": query_keyword,
+            "page": page,
+            "per_page": 1,
+            "orientation": "landscape",
+            "client_id": unsplash_key
+        }
+        res = requests.get(url, params=params, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("results"):
+                # 선명하고 적당한 용량의 regular 사이즈 URL 반환
+                return data["results"][0]["urls"]["regular"]
+    except Exception:
+        pass
+    # 키워드 검색 실패 시 기본 캐나다 라이프스타일 사진 fallback
+    fallback_seed = random.randint(1, 100)
+    return f"https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=1000&auto=format&fit=crop&q=80&sig={fallback_seed}"
 
 # --- [1단계: 글 재료 입력하기] ---
 st.markdown("### 📝 1단계: 글 재료 입력하기")
@@ -67,19 +85,17 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
     if not topic.strip():
         st.warning("핵심 주제를 입력해 주세요.")
     else:
-        with st.spinner("내용을 분석하여 블로그 글 초안과 고화질 사진 2장을 생성하고 있습니다..."):
+        with st.spinner("내용을 분석하여 블로그 글 초안과 고화질 실제 스톡 사진을 가져오고 있습니다..."):
             try:
-                # 참고 기사/자료 지침
                 source_instruction = ""
                 if source_content.strip():
                     source_instruction = f"""
                     [참고할 원문 데이터]:
                     \"\"\"{source_content.strip()}\"\"\"
                     - 원문의 표현을 그대로 복사하지 마세요 (표절 방지).
-                    - 위 원문에서 핵심 사실, 숫자, 주요 시사점을 추출한 뒤, 이웃과 대화하듯 알기 쉽고 흥미롭게 풀어내세요.
+                    - 위 원문에서 핵심 사실, 숫자, 주요 시사점을 추출한 뒤 친근한 선배 맘의 말투로 알기 쉽게 풀어내세요.
                     """
 
-                # 개인 경험/생각 지침
                 exp_instruction = ""
                 if experience.strip():
                     exp_instruction = f"""
@@ -89,7 +105,7 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
 
                 prompt = f"""
                 당신은 캐나다에 거주하며 유용한 생활 정보, 세상 돌아가는 소식, 진솔한 생각을 나누는 친근한 인기 블로거(Youngmom-canada-life)입니다.
-                독자들이 재미있고 유익하게 읽을 수 있는 매력적인 블로그 글을 작성하세요.
+                독자들이 흥미롭고 편안하게 읽을 수 있는 블로그 포스팅을 작성하세요.
 
                 [카테고리]: {category}
                 [주제]: {topic}
@@ -97,7 +113,7 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 {exp_instruction}
 
                 [작성 가이드]
-                1. 첫 번째 줄은 반드시 "TITLE: [주제에 맞고 클릭하고 싶은 한글 블로그 제목]" 형식으로 시작하세요.
+                1. 첫 번째 줄은 반드시 "TITLE: [주제에 맞고 매력적인 한글 블로그 제목]" 형식으로 시작하세요.
                 2. 어조: 다정하고 명쾌한 어조 (~해요, ~했답니다). 어려운 전문 용어나 기술 뉴스도 누구나 쉽게 이해할 수 있게 설명하세요.
                 3. 구성:
                    - 도입부: 이 주제나 뉴스를 접하고 든 생각, 흥미로운 공감 질문
@@ -105,9 +121,9 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                    - 본문 문단 2 바로 앞 줄에 반드시 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 입력
                    - 본문 문단 2, 3 (우리가 주목할 점, 일상이나 실생활에 주는 영향)
                    - 맺음말: 독자들에게 건네는 따뜻한 소감과 질문
-                4. 글 맨 마지막 두 줄에는 반드시 아래 형식으로 사진 묘사를 적으세요:
-                   THUMBNAIL_PROMPT: [Editorial lifestyle photograph representing '{topic}', natural daylight, cozy atmosphere]
-                   BODY_PROMPT: [Close-up detailed photo of hands, documents, tech devices or desk scene related to '{topic}']
+                4. 글 맨 마지막 두 줄에는 Unsplash 검색용 간결한 영어 단어/키워드(2~3단어)를 아래 형식으로 적으세요:
+                   THUMBNAIL_KEYWORD: [글 전체 분위기를 표현하는 간결한 영어 검색어 2~3단어, 예: artificial intelligence laptop, canadian winter cozy, grocery shopping]
+                   BODY_KEYWORD: [본문 세부 내용과 관련된 간결한 영어 검색어 2~3단어, 예: office paperwork desk, computer code screen, supermarket shelves]
                 """
 
                 client = genai.Client(api_key=api_key)
@@ -117,7 +133,7 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 )
                 full_text = response.text.strip()
 
-                # 1) 제목 추출 (안전 파싱)
+                # 1) 제목 추출
                 post_title = topic
                 if "TITLE:" in full_text:
                     parts = full_text.split("TITLE:", 1)[1].split("\n", 1)
@@ -126,41 +142,36 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 else:
                     main_content = full_text
 
-                # 2) 프롬프트 분리 및 본문 추출 (안전 파싱)
-                thumb_prompt = f"Warm modern photo about {topic}, clean lifestyle aesthetic"
-                body_prompt = f"Detailed close up desk scene with notebook, pen or device related to {topic}"
+                # 2) Unsplash 검색 키워드 추출
+                thumb_kw = "canada lifestyle"
+                body_kw = "workspace desk"
 
-                if "THUMBNAIL_PROMPT:" in main_content:
-                    split_body, prompt_tail = main_content.rsplit("THUMBNAIL_PROMPT:", 1)
+                if "THUMBNAIL_KEYWORD:" in main_content:
+                    split_body, kw_tail = main_content.rsplit("THUMBNAIL_KEYWORD:", 1)
                     final_body = split_body.strip()
-                    if "BODY_PROMPT:" in prompt_tail:
-                        t_part, b_part = prompt_tail.split("BODY_PROMPT:", 1)
-                        thumb_prompt = t_part.strip()
-                        body_prompt = b_part.strip()
+                    if "BODY_KEYWORD:" in kw_tail:
+                        t_part, b_part = kw_tail.split("BODY_KEYWORD:", 1)
+                        thumb_kw = t_part.strip()
+                        body_kw = b_part.strip()
                     else:
-                        thumb_prompt = prompt_tail.strip()
+                        thumb_kw = kw_tail.strip()
                 else:
                     final_body = main_content.strip()
 
-                # 혹시라도 파싱 문제로 본문이 비었을 때를 대비한 안전장치
                 if not final_body:
                     final_body = full_text
 
-                # 랜덤 시드 생성
-                thumb_seed = random.randint(1000, 999999)
-                body_seed = random.randint(1000, 999999)
+                # 3) Unsplash 고화질 사진 호출 (초기 1페이지)
+                thumb_url = get_unsplash_photo(thumb_kw, page=1)
+                body_url = get_unsplash_photo(body_kw, page=1)
 
-                thumb_url = generate_flux_image_url(thumb_prompt, 1000, 580, thumb_seed)
-                body_url = generate_flux_image_url(body_prompt, 1000, 520, body_seed)
-
-                # 세션에 최종 저장
                 st.session_state.post_data = {
                     "title": post_title,
                     "body": final_body,
-                    "thumb_prompt": thumb_prompt,
-                    "body_prompt": body_prompt,
-                    "thumb_seed": thumb_seed,
-                    "body_seed": body_seed,
+                    "thumb_kw": thumb_kw,
+                    "body_kw": body_kw,
+                    "thumb_page": 1,
+                    "body_page": 1,
                     "thumb_url": thumb_url,
                     "body_url": body_url
                 }
@@ -172,7 +183,7 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
 if st.session_state.post_data:
     st.divider()
     st.markdown("### 🔍 2단계: 엄마의 검토 및 사진 확인 (Review)")
-    st.info("💡 글과 사진을 확인해 보세요. 사진이 마음에 안 들면 **[🔄 다른 사진 뽑기]**를 누르고, 마음에 들면 아래 **[최종 발행하기]**를 누르세요!")
+    st.info("💡 글과 사진을 확인해 보세요. 사진이 마음에 안 들면 **[🔄 다른 사진 찾기]**를 누르면 같은 주제의 다른 실제 사진으로 바뀝니다!")
 
     # 1. 제목 수정
     reviewed_title = st.text_input(
@@ -180,30 +191,32 @@ if st.session_state.post_data:
         value=st.session_state.post_data["title"]
     )
 
-    # 2. 이미지 미리보기 및 다시 뽑기
-    st.markdown("##### 🖼️ 삽입될 실사 사진")
+    # 2. 이미지 미리보기 및 다른 사진 뽑기
+    st.markdown("##### 🖼️ 삽입될 고화질 실제 스톡 사진 (Unsplash)")
     col1, col2 = st.columns(2)
     
     with col1:
-        st.caption("1. 대표 사진 (썸네일)")
+        st.caption(f"1. 대표 사진 (키워드: {st.session_state.post_data['thumb_kw']})")
         st.image(st.session_state.post_data["thumb_url"], use_container_width=True)
         if st.button("🔄 대표 사진 다른 걸로 바꾸기", key="regen_thumb"):
-            new_seed = random.randint(1000, 999999)
-            st.session_state.post_data["thumb_seed"] = new_seed
-            st.session_state.post_data["thumb_url"] = generate_flux_image_url(
-                st.session_state.post_data["thumb_prompt"], 1000, 580, new_seed
+            st.session_state.post_data["thumb_page"] += 1
+            new_url = get_unsplash_photo(
+                st.session_state.post_data["thumb_kw"], 
+                page=st.session_state.post_data["thumb_page"]
             )
+            st.session_state.post_data["thumb_url"] = new_url
             st.rerun()
 
     with col2:
-        st.caption("2. 본문 중간 사진")
+        st.caption(f"2. 본문 중간 사진 (키워드: {st.session_state.post_data['body_kw']})")
         st.image(st.session_state.post_data["body_url"], use_container_width=True)
         if st.button("🔄 본문 사진 다른 걸로 바꾸기", key="regen_body"):
-            new_seed = random.randint(1000, 999999)
-            st.session_state.post_data["body_seed"] = new_seed
-            st.session_state.post_data["body_url"] = generate_flux_image_url(
-                st.session_state.post_data["body_prompt"], 1000, 520, new_seed
+            st.session_state.post_data["body_page"] += 1
+            new_url = get_unsplash_photo(
+                st.session_state.post_data["body_kw"], 
+                page=st.session_state.post_data["body_page"]
             )
+            st.session_state.post_data["body_url"] = new_url
             st.rerun()
 
     # 3. 본문 수정

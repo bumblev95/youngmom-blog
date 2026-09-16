@@ -1,15 +1,17 @@
 import streamlit as st
 from google import genai
 import urllib.parse
+import urllib.request
 import smtplib
 import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 
 st.set_page_config(page_title="YoungMom Canada 블로그 비서", page_icon="🍁", layout="centered")
 
 st.title("🍁 YoungMom Canada 글 생성기")
-st.caption("고화질 실사 사진과 함께 글을 완성하고, 꼼꼼히 검토한 뒤 블로그에 등록하세요.")
+st.caption("고화질 실사 사진과 함께 글을 완성하고, 검토 후 블로그에 안전하게 자동 등록하세요.")
 
 # 1. 환경 변수(Secrets) 연동
 api_key = st.secrets.get("GEMINI_API_KEY")
@@ -25,7 +27,7 @@ if not all([api_key, sender_email, app_password, blogger_email]):
 if "post_data" not in st.session_state:
     st.session_state.post_data = None
 
-# 고화질 실사 사진 URL 생성 함수 (Flux 모델 + 시드 적용)
+# 고화질 실사 사진 URL 생성 함수 (Flux 모델)
 def generate_flux_image_url(prompt_text, width, height, seed):
     camera_style = ", authentic lifestyle photography, shot on 35mm lens, soft natural lighting, warm tone, realistic texture, 8k resolution, highly detailed, photorealistic, no 3d render, no cgi, no text, no watermark"
     enhanced_prompt = prompt_text + camera_style
@@ -98,12 +100,10 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
 
                 [필수 작성 규칙]
                 1. 첫 줄은 반드시 "TITLE: [한글 블로그 제목]" 형식이어야 합니다.
-                2. 불필요한 검색 찌꺼기 텍스트(A, Alberta.ca 등) 절대 금지.
+                2. 불필요한 검색 찌꺼기 텍스트 절대 금지.
                 3. 구성:
                    - 도입부: 이 주제를 다루게 된 계기 또는 공감 질문
-                   - 본문 팁 1번
-                   - 본문 팁 2번 바로 직전 줄에 반드시 "[INSERT_BODY_IMAGE]" 태그 삽입
-                   - 본문 팁 2번, 3번 (상세 해결책 및 핵심 정보)
+                   - 본문 팁 1번, 2번, 3번 (현실적인 조언, 주의사항, 상세 해결책)
                    - 실전 템플릿: 관공서/현지에 문의할 때 쓰는 간단한 영어 문장 박스
                    - 요약: [한눈에 보는 핵심 요약] (화살표 ↓ 활용)
                    - 다정한 맺음말
@@ -138,7 +138,7 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 else:
                     main_body = full_text
 
-                # 랜덤 시드로 첫 이미지 생성
+                # 랜덤 시드로 첫 이미지 URL 생성
                 thumb_seed = random.randint(1000, 999999)
                 body_seed = random.randint(1000, 999999)
 
@@ -164,7 +164,7 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
 if st.session_state.post_data:
     st.divider()
     st.markdown("### 🔍 2단계: 엄마의 검토 및 사진 확인 (Review)")
-    st.info("💡 사진과 글을 확인하세요. 사진이 마음에 안 들면 **[🔄 다른 사진 뽑기]**를 누르면 바로 바뀝니다!")
+    st.info("💡 사진과 글을 확인하세요. 마음에 들면 아래 '블로그에 최종 발행하기'를 누르시면 됩니다!")
 
     # 1. 제목 수정
     reviewed_title = st.text_input(
@@ -172,12 +172,12 @@ if st.session_state.post_data:
         value=st.session_state.post_data["title"]
     )
 
-    # 2. 이미지 미리보기 및 다시 뽑기 버튼
-    st.markdown("##### 🖼️ 삽입될 실사 사진 (Flux 모델)")
+    # 2. 이미지 미리보기 및 다시 뽑기
+    st.markdown("##### 🖼️ 함께 등록될 사진 2장")
     col1, col2 = st.columns(2)
     
     with col1:
-        st.caption("1. 대표 사진 (썸네일)")
+        st.caption("1. 대표 사진")
         st.image(st.session_state.post_data["thumb_url"], use_container_width=True)
         if st.button("🔄 대표 사진 다른 걸로 바꾸기", key="regen_thumb"):
             new_seed = random.randint(1000, 999999)
@@ -188,7 +188,7 @@ if st.session_state.post_data:
             st.rerun()
 
     with col2:
-        st.caption("2. 본문 중간 사진")
+        st.caption("2. 본문 사진")
         st.image(st.session_state.post_data["body_url"], use_container_width=True)
         if st.button("🔄 본문 사진 다른 걸로 바꾸기", key="regen_body"):
             new_seed = random.randint(1000, 999999)
@@ -200,37 +200,29 @@ if st.session_state.post_data:
 
     # 3. 본문 수정
     reviewed_body = st.text_area(
-        "본문 내용 확인/수정 (직접 글을 수정하실 수 있습니다)", 
+        "본문 내용 확인/수정", 
         value=st.session_state.post_data["body"],
         height=350
     )
 
-    # 4. 최종 발행 버튼
+    # 4. 최종 자동 발행 버튼
     col_send, col_cancel = st.columns([3, 1])
     with col_send:
         if st.button("🚀 검토 완료! 블로그에 최종 발행하기", type="primary", use_container_width=True):
-            with st.spinner("블로그에 최종 글과 고화질 사진을 등록하고 있습니다..."):
+            with st.spinner("사진 파일을 다운로드하여 안전하게 블로그로 전송 중입니다..."):
                 try:
-                    thumb_url = st.session_state.post_data["thumb_url"]
-                    body_url = st.session_state.post_data["body_url"]
+                    # 1) 사진을 메모리에 실제 파일 데이터로 다운로드 (스팸 링크 제거용)
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    req1 = urllib.request.Request(st.session_state.post_data["thumb_url"], headers=headers)
+                    thumb_bytes = urllib.request.urlopen(req1, timeout=20).read()
 
-                    body_img_html = f"""
-                    <div style="text-align: center; margin: 30px 0;">
-                        <img src="{body_url}" style="width: 100%; max-width: 750px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);" alt="팁 관련 사진" />
-                    </div>
-                    """
+                    req2 = urllib.request.Request(st.session_state.post_data["body_url"], headers=headers)
+                    body_bytes = urllib.request.urlopen(req2, timeout=20).read()
 
-                    if "[INSERT_BODY_IMAGE]" in reviewed_body:
-                        html_body_text = reviewed_body.replace("[INSERT_BODY_IMAGE]", body_img_html)
-                    else:
-                        html_body_text = reviewed_body + body_img_html
-
-                    formatted_body = html_body_text.strip().replace("\n", "<br>")
+                    # 2) 메일 본문 조립 (의심스러운 외부 URL 완전 제거)
+                    formatted_body = reviewed_body.strip().replace("\n", "<br>")
                     final_html = f"""
                     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.85; font-size: 16px; color: #333;">
-                        <div style="text-align: center; margin-bottom: 25px;">
-                            <img src="{thumb_url}" style="width: 100%; max-width: 800px; border-radius: 10px;" alt="대표 사진" />
-                        </div>
                         {formatted_body}
                     </div>
                     """
@@ -241,11 +233,21 @@ if st.session_state.post_data:
                     msg['To'] = blogger_email
                     msg.attach(MIMEText(final_html, 'html', 'utf-8'))
 
+                    # 3) 구글 블로거 규격에 맞춰 사진 2장을 '진짜 파일'로 첨부
+                    img1 = MIMEImage(thumb_bytes, name="featured_photo.jpg")
+                    img1.add_header('Content-Disposition', 'attachment', filename='featured_photo.jpg')
+                    msg.attach(img1)
+
+                    img2 = MIMEImage(body_bytes, name="content_photo.jpg")
+                    img2.add_header('Content-Disposition', 'attachment', filename='content_photo.jpg')
+                    msg.attach(img2)
+
+                    # 4) 발송
                     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
                         server.login(sender_email, app_password)
                         server.send_message(msg)
 
-                    st.success(f"🎉 성공적으로 등록되었습니다! '{reviewed_title}'")
+                    st.success(f"🎉 성공적으로 자동 등록되었습니다! '{reviewed_title}'")
                     st.balloons()
                     st.session_state.post_data = None
 

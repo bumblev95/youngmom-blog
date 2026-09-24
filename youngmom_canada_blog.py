@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 st.set_page_config(page_title="YoungMom Canada 블로그 비서", page_icon="🍁", layout="centered")
 
 st.title("🍁 YoungMom Canada 인터뷰형 글 생성기")
-st.caption("AI 에디터의 질문과 현장 디테일, 넉넉한 분량으로 구글 E-E-A-T 기준을 완벽히 충족합니다.")
+st.caption("AI 에디터의 질문과 현장 디테일, 넉넉한 분량으로 구글 E-E-A-T 기준을 충족합니다.")
 st.link_button("📊 내 블로그 방문자 통계 보러가기", "https://www.blogger.com/go/stats")
 
 # 1. 환경 변수 연동
@@ -60,6 +60,23 @@ def get_unsplash_photo(query_keyword, page=1):
 
 client = genai.Client(api_key=api_key)
 
+# 503 서버 과부하 자동 우회(Fallback) 함수
+def generate_content_with_fallback(prompt_text):
+    models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash"]
+    last_err = None
+    for m in models_to_try:
+        try:
+            resp = client.models.generate_content(
+                model=m,
+                contents=prompt_text
+            )
+            if resp and resp.text:
+                return resp.text.strip()
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err
+
 # --- [1단계: 기본 글감 입력] ---
 st.markdown("### 📝 1단계: 글 주제 & 기본 경험 던져주기")
 
@@ -98,7 +115,7 @@ with col_ask:
         if not topic.strip():
             st.warning("주제를 먼저 입력해 주세요.")
         else:
-            with st.spinner("AI 에디터가 생생한 현장감을 위해 질문을 준비 중입니다..."):
+            with st.spinner("AI 에디터가 질문을 준비하고 있습니다 (서버 혼잡 시 자동 우회)..."):
                 try:
                     q_prompt = f"""
                     당신은 노련한 캐나다 생활 블로그 편집자입니다.
@@ -109,11 +126,8 @@ with col_ask:
                     작성자에게 현장 디테일을 물어볼 질문 2~3가지만 다정하게 작성해 주세요.
                     (구체적 비용 $, 시간, 장소, 실패담이나 주의할 점 위주)
                     """
-                    resp = client.models.generate_content(
-                        model="gemini-3.6-flash",
-                        contents=q_prompt
-                    )
-                    st.session_state.interview_questions = resp.text.strip()
+                    questions_text = generate_content_with_fallback(q_prompt)
+                    st.session_state.interview_questions = questions_text
                     st.session_state.draft_inputs = {
                         "category": category,
                         "topic": topic,
@@ -177,17 +191,13 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                    - 본문 2 직전 줄에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 넣기
                    - 본문 2: 현지 초보들이 가장 흔히 겪는 실수와 현실적인 대처법
                    - 본문 3: 알아두면 유용한 꿀팁 한 가지 더 (추천 앱, 방문 시간대, 서류 등)
-                   - 맺음말: 독자들에게 건네는 따뜻한 소감 및 댓글 유도 질문
+                   - 맺음말: 독자들에게 건네는 따뜻한 응원 및 댓글 유도 질문
                 6. 글 맨 마지막 두 줄:
                    THUMBNAIL_KEYWORD: [글 분위기 영어 스톡 검색어 2~3단어]
                    BODY_KEYWORD: [본문 세부 내용 영어 스톡 검색어 2~3단어]
                 """
 
-                resp = client.models.generate_content(
-                    model="gemini-3.6-flash",
-                    contents=write_prompt
-                )
-                full_text = resp.text.strip()
+                full_text = generate_content_with_fallback(write_prompt)
 
                 post_title = saved['topic']
                 if "TITLE:" in full_text:
@@ -238,7 +248,7 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
 if st.session_state.post_data:
     st.divider()
     st.markdown("### 🔍 3단계: 최종 검토 및 분량 조절")
-    st.info("💡 본문 분량이 아쉽다면 아래 **[🔄 본문 살 붙여서 더 길게 늘리기]** 버튼을 눌러보세요!")
+    st.info("💡 본문 분량이 아쉽다면 아래 **[➕ 본문 살 붙여서 더 길게 늘리기]** 버튼을 눌러보세요!")
 
     reviewed_title = st.text_input("블로그 제목", value=st.session_state.post_data["title"])
 
@@ -266,9 +276,8 @@ if st.session_state.post_data:
             )
             st.rerun()
 
-    # 분량 확장 버튼
     if st.button("➕ 본문 살 붙여서 더 길게 늘리기 (실전 팁 & Q&A 추가)", use_container_width=True):
-        with st.spinner("기존 글 흐름을 유지하며 경험 디테일과 꿀팁을 대폭 확장하고 있습니다..."):
+        with st.spinner("기존 글 흐름을 유지하며 경험 디테일과 꿀팁을 확장하고 있습니다..."):
             try:
                 expand_prompt = f"""
                 당신은 캐나다 생활 블로거 'YoungMom'입니다.
@@ -284,11 +293,7 @@ if st.session_state.post_data:
                 [기존 글]:
                 {st.session_state.post_data['body']}
                 """
-                exp_resp = client.models.generate_content(
-                    model="gemini-3.6-flash",
-                    contents=expand_prompt
-                )
-                expanded_text = exp_resp.text.strip()
+                expanded_text = generate_content_with_fallback(expand_prompt)
                 st.session_state.post_data["body"] = expanded_text
                 st.success("글 분량이 풍성하게 확장되었습니다!")
                 st.rerun()

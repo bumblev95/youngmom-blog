@@ -60,9 +60,9 @@ def get_unsplash_photo(query_keyword, page=1):
 
 client = genai.Client(api_key=api_key)
 
-# 503 서버 과부하 자동 우회(Fallback) 함수
+# 최신 3.8 모델 우선 호출 & 3.6 자동 백업 함수
 def generate_content_with_fallback(prompt_text):
-    models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash"]
+    models_to_try = ["gemini-3.8-flash", "gemini-3.6-flash"]
     last_err = None
     for m in models_to_try:
         try:
@@ -115,7 +115,7 @@ with col_ask:
         if not topic.strip():
             st.warning("주제를 먼저 입력해 주세요.")
         else:
-            with st.spinner("AI 에디터가 질문을 준비하고 있습니다 (서버 혼잡 시 자동 우회)..."):
+            with st.spinner("AI 에디터가 질문을 준비하고 있습니다 (3.8 우선, 혼잡 시 3.6 자동 우회)..."):
                 try:
                     q_prompt = f"""
                     당신은 노련한 캐나다 생활 블로그 편집자입니다.

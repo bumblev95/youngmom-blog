@@ -8,11 +8,11 @@ from email.mime.text import MIMEText
 
 st.set_page_config(page_title="YoungMom Canada 블로그 비서", page_icon="🍁", layout="centered")
 
-st.title("🍁 YoungMom Canada 글 생성기")
-st.caption("고화질 실제 스톡 사진과 함께 글을 완성하고, 꼼꼼히 검토한 뒤 블로그에 등록하세요.")
+st.title("🍁 YoungMom Canada 오리지널 글 생성기")
+st.caption("구글 애드센스 E-E-A-T(실제 경험·현장 디테일) 기준을 충족하는 진짜 현지 맘 스타일 글을 작성합니다.")
 st.link_button("📊 내 블로그 방문자 통계 보러가기", "https://www.blogger.com/go/stats")
 
-# 1. 환경 변수(Secrets) 연동
+# 1. 환경 변수 연동
 api_key = st.secrets.get("GEMINI_API_KEY")
 sender_email = st.secrets.get("SENDER_EMAIL")
 app_password = st.secrets.get("GMAIL_APP_PASSWORD")
@@ -23,18 +23,15 @@ if not all([api_key, sender_email, app_password, blogger_email, unsplash_key]):
     st.error("Streamlit Secrets에 필수 설정(API 키, 이메일, Unsplash 키 등)이 누락되었습니다.")
     st.stop()
 
-# 2. 세션 상태 초기화
 if "post_data" not in st.session_state:
     st.session_state.post_data = None
 
-# 스팸 필터에 걸리지 않도록 URL을 정제하는 함수
 def clean_unsplash_url(raw_url):
     if "?" in raw_url:
         base = raw_url.split("?")[0]
         return f"{base}?w=800&q=80"
     return raw_url
 
-# Unsplash 고화질 사진 검색 함수
 def get_unsplash_photo(query_keyword, page=1):
     try:
         url = "https://api.unsplash.com/search/photos"
@@ -62,74 +59,73 @@ st.markdown("### 📝 1단계: 글 재료 입력하기")
 category = st.selectbox(
     "1. 카테고리 선택",
     [
-        "✏️ 기타 캐나다 일상 & 생각",
-        "📑 알버타 행정 & 서류 (운전면허, 헬스케어, 연금, 혜택)",
-        "🏠 렌트 & 이사 (디파짓 반환, 계약서, 인스펙션)",
-        "🚗 차량 & 생활 안전 (타이어, 한파, 소비자 권리)",
-        "🛒 현지 알뜰 장보기 (코스트코, 마트 꿀템/물가 비교)"
+        "🛒 현지 알뜰 장보기 (코스트코, 마트 꿀템/물가 비교)",
+        "🚗 차량 & 생활 안전 (타이어, 한파, 정비소, 보험)",
+        "🏠 렌트 & 이사 (디파짓 반환, 계약서, 인스펙션, 가구 정리)",
+        "📑 알버타 행정 & 서류 (운전면허, 헬스케어, 차일드베네핏, 세금)",
+        "✏️ 리얼 캐나다 일상 (육아, 로컬 마켓, 날씨, 이민 생각)"
     ]
 )
 
 topic = st.text_input(
     "2. 핵심 주제", 
-    placeholder="예: 요즘 화제인 AI 이야기 / 캐나다 연금 혜택 / 코스트코 장보기"
-)
-
-source_content = st.text_area(
-    "3. 📰 참고할 기사나 다른 글 내용 (선택: 복사해서 붙여넣기)",
-    placeholder="뉴스 기사, IT 소식, 정부 공지문, 칼럼 등 자유롭게 복사해 붙여넣으세요.",
-    height=120
+    placeholder="예: 코스트코 10월 필수 알뜰템 / 겨울 스노우타이어 교체 비용 비교 / 렌트 디파짓 떼이지 않는 법"
 )
 
 experience = st.text_area(
-    "4. 💡 엄마의 실제 생각이나 한마디 (선택)", 
-    placeholder="예: 뉴스 보면서 세상이 참 빠르다고 느낌 / 지인이 이거 쓰고 편하다고 했음",
-    height=80
+    "3. 💡 엄마의 실제 경험·생각·상황 한마디 (★핵심 치트키!)", 
+    placeholder="짧게 써도 좋습니다!\n예: 지난주에 코스트코 갔다가 올리브유 가격 보고 기절함 / 작년에 타이어 예약 늦어서 3주 기다렸던 기억 / 집주인이 벽 못 자국으로 50불 깎으려고 했음",
+    height=90
 )
 
-if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="primary", use_container_width=True):
+source_content = st.text_area(
+    "4. 📰 참고할 뉴스, 공지, 기사 링크나 텍스트 (선택)",
+    placeholder="참고하고 싶은 최신 뉴스나 정부 정책 내용이 있다면 편하게 붙여넣으세요.",
+    height=100
+)
+
+if st.button("✨ 사람 냄새 100% 오리지널 글 초안 만들기", type="primary", use_container_width=True):
     if not topic.strip():
         st.warning("핵심 주제를 입력해 주세요.")
     else:
-        with st.spinner("내용을 분석하여 블로그 글 초안과 고화질 실제 스톡 사진을 가져오고 있습니다..."):
+        with st.spinner("구글 E-E-A-T 기준을 만족하는 진짜 현지 맘의 오리지널 글을 집필하고 있습니다..."):
             try:
-                source_instruction = ""
+                exp_detail = experience.strip() if experience.strip() else "현지에서 직접 장을 보고 살림을 꾸리며 몸으로 부딪치고 배운 솔직한 경험"
+                
+                source_guide = ""
                 if source_content.strip():
-                    source_instruction = f"""
-                    [참고할 원문 데이터]:
-                    \"\"\"{source_content.strip()}\"\"\"
-                    - 원문의 표현을 그대로 복사하지 마세요 (표절 방지).
-                    - 위 원문에서 핵심 사실, 숫자, 주요 시사점을 추출한 뒤 친근한 선배 맘의 말투로 알기 쉽게 풀어내세요.
-                    """
-
-                exp_instruction = ""
-                if experience.strip():
-                    exp_instruction = f"""
-                    - [작성자의 생각/경험]: "{experience.strip()}"
-                    - 위 생각을 글의 도입부나 마무리 소감에 자연스럽게 담아내세요.
+                    source_guide = f"""
+                    [참고 팩트 데이터]:
+                    {source_content.strip()}
+                    (주의: 위 내용을 요약하듯 베끼지 말고, 핵심 사실만 취한 뒤 철저히 현지 맘의 시각과 언어로 재해석하세요.)
                     """
 
                 prompt = f"""
-                당신은 캐나다에 거주하며 유용한 생활 정보, 세상 돌아가는 소식, 진솔한 생각을 나누는 친근한 인기 블로거(Youngmom-canada-life)입니다.
-                독자들이 흥미롭고 편안하게 읽을 수 있는 블로그 포스팅을 작성하세요.
+                당신은 캐나다 알버타에 거주하는 이민/정착 선배이자 현실감 넘치는 살림꾼 블로거 'YoungMom'입니다.
+                구글 애드센스 심사 봇이 판별하는 'AI 생성 저가치 콘텐츠(Low Value Content)' 규정을 완벽하게 피하고, 
+                진짜 현지 사람이 직접 발로 뛰며 겪은 경험(E-E-A-T)이 뚝뚝 묻어나는 블로그 글을 써야 합니다.
 
-                [카테고리]: {category}
-                [주제]: {topic}
-                {source_instruction}
-                {exp_instruction}
+                [글 정보]
+                - 카테고리: {category}
+                - 주제: {topic}
+                - 작성자의 실제 상황/경험/한마디: "{exp_detail}"
+                {source_guide}
 
-                [작성 가이드]
-                1. 첫 번째 줄은 반드시 "TITLE: [주제에 맞고 매력적인 한글 블로그 제목]" 형식으로 시작하세요.
-                2. 어조: 다정하고 명쾌한 어조 (~해요, ~했답니다).
-                3. 구성:
-                   - 도입부: 이 주제나 뉴스를 접하고 든 생각, 흥미로운 공감 질문
-                   - 본문 문단 1 (핵심 이슈 및 쉬운 설명)
-                   - 본문 문단 2 바로 앞 줄에 반드시 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 입력
-                   - 본문 문단 2, 3 (우리가 주목할 점, 일상이나 실생활에 주는 영향)
-                   - 맺음말: 독자들에게 건네는 따뜻한 소감과 질문
-                4. 글 맨 마지막 두 줄에는 Unsplash 검색용 간결한 영어 단어/키워드(2~3단어)를 아래 형식으로 적으세요:
-                   THUMBNAIL_KEYWORD: [글 전체 분위기를 표현하는 간결한 영어 검색어 2~3단어]
-                   BODY_KEYWORD: [본문 세부 내용과 관련된 간결한 영어 검색어 2~3단어]
+                [필수 집필 규칙 - AI 냄새 완전 제거]
+                1. 첫 줄은 반드시 "TITLE: [현지 맘의 생생한 느낌이 살아있는 매력적인 제목]" 으로 작성하세요.
+                2. 절대로 백과사전식 설명, 기계적인 말투(~에 대해 알아보겠습니다, 장단점을 살펴보겠습니다 등)를 쓰지 마세요.
+                3. 친한 이웃 엄마나 동생에게 커피 마시며 솔직하게 털어놓듯 다정하고 똑 부러지는 말투(~해요, ~더라고요, ~했답니다)를 쓰세요.
+                4. [실제 경험]을 글의 오프닝(도입부)에 아주 생생한 상황 묘사(시간, 감정, 당황했던 순간 등)로 풀어내세요.
+                5. 글 본문에 구체적인 현지 디테일(대략적인 현지 달러 금액 $, 대기 시간, 매장 이름, 브랜드명, 현실적인 주의점)을 2개 이상 반드시 포함하세요.
+                6. 구성:
+                   - 도입부: 작성자의 실제 경험/생각을 바탕으로 한 현실 공감 오프닝
+                   - 본문 1: 직접 부딪치며 알게 된 핵심 팁 (구체적인 방법과 비용 꿀팁)
+                   - 본문 2 직전에 반드시 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 넣기
+                   - 본문 2: 현지 초보들이 가장 많이 실수하는 현실적인 주의사항
+                   - 맺음말: 독자들에게 따뜻한 응원과 "여러분은 어떠신가요?" 묻는 소통형 마무리
+                7. 글 맨 마지막 두 줄:
+                   THUMBNAIL_KEYWORD: [글 분위기에 맞는 간결한 영어 스톡 검색어 2~3단어]
+                   BODY_KEYWORD: [본문 내용에 맞는 간결한 영어 스톡 검색어 2~3단어]
                 """
 
                 client = genai.Client(api_key=api_key)
@@ -147,8 +143,8 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
                 else:
                     main_content = full_text
 
-                thumb_kw = "canada lifestyle"
-                body_kw = "workspace desk"
+                thumb_kw = "canada daily life"
+                body_kw = "grocery shopping"
 
                 if "THUMBNAIL_KEYWORD:" in main_content:
                     split_body, kw_tail = main_content.rsplit("THUMBNAIL_KEYWORD:", 1)
@@ -182,11 +178,11 @@ if st.button("🔍 고화질 사진 & 초안 만들기 (미리보기)", type="pr
             except Exception as e:
                 st.error(f"초안 생성 중 오류가 발생했습니다: {e}")
 
-# --- [2단계: 엄마의 검토 및 수정 (Review)] ---
+# --- [2단계: 엄마의 검토 및 사진 확인] ---
 if st.session_state.post_data:
     st.divider()
-    st.markdown("### 🔍 2단계: 엄마의 검토 및 사진 확인 (Review)")
-    st.info("💡 글과 사진을 확인해 보세요. 사진이 마음에 안 들면 **[🔄 다른 사진 찾기]**를 누르고, 마음에 들면 아래 **[최종 발행하기]**를 누르세요!")
+    st.markdown("### 🔍 2단계: 엄마의 검토 및 최종 발행 (Review)")
+    st.info("💡 글과 사진을 확인해 보세요. 내용이 마음에 들면 아래 **[최종 발행하기]**를 누르시면 됩니다!")
 
     reviewed_title = st.text_input(
         "블로그 제목 확인/수정", 
@@ -209,7 +205,7 @@ if st.session_state.post_data:
             st.rerun()
 
     with col2:
-        st.caption(f"2. 본문 중간 사진 (키워드: {st.session_state.post_data['body_kw']})")
+        st.caption(f"2. 본문 사진 (키워드: {st.session_state.post_data['body_kw']})")
         st.image(st.session_state.post_data["body_url"], use_container_width=True)
         if st.button("🔄 본문 사진 다른 걸로 바꾸기", key="regen_body"):
             st.session_state.post_data["body_page"] += 1
@@ -226,26 +222,23 @@ if st.session_state.post_data:
         height=350
     )
 
+    thumb_url = st.session_state.post_data["thumb_url"]
+    body_url = st.session_state.post_data["body_url"]
+    body_img_html = f'<p style="text-align:center; margin:25px 0;"><img src="{body_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="본문 이미지"></p>'
+
+    if "[INSERT_BODY_IMAGE]" in reviewed_body:
+        html_body_text = reviewed_body.replace("[INSERT_BODY_IMAGE]", body_img_html)
+    else:
+        html_body_text = reviewed_body + body_img_html
+
+    formatted_body = html_body_text.strip().replace("\n", "<br>")
+    final_html = f"""<html><body><div style="font-family: sans-serif; line-height: 1.8; font-size: 16px; color: #222;"><p style="text-align:center; margin-bottom:20px;"><img src="{thumb_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="대표 이미지"></p>{formatted_body}</div></body></html>"""
+
     col_send, col_cancel = st.columns([3, 1])
     with col_send:
         if st.button("🚀 검토 완료! 블로그에 최종 발행하기", type="primary", use_container_width=True):
             with st.spinner("구글 스팸 필터를 우회하여 안전하게 발행 중입니다..."):
                 try:
-                    thumb_url = st.session_state.post_data["thumb_url"]
-                    body_url = st.session_state.post_data["body_url"]
-
-                    body_img_html = f'<p style="text-align:center; margin:25px 0;"><img src="{body_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="본문 이미지"></p>'
-
-                    if "[INSERT_BODY_IMAGE]" in reviewed_body:
-                        html_body_text = reviewed_body.replace("[INSERT_BODY_IMAGE]", body_img_html)
-                    else:
-                        html_body_text = reviewed_body + body_img_html
-
-                    formatted_body = html_body_text.strip().replace("\n", "<br>")
-                    
-                    final_html = f"""<html><body><div style="font-family: sans-serif; line-height: 1.8; font-size: 16px; color: #222;"><p style="text-align:center; margin-bottom:20px;"><img src="{thumb_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="대표 이미지"></p>{formatted_body}</div></body></html>"""
-
-                    # 구글 스팸 필터를 통과하기 위한 multipart/alternative 표준 포맷
                     msg = MIMEMultipart('alternative')
                     msg['Subject'] = reviewed_title
                     msg['From'] = sender_email
@@ -273,3 +266,7 @@ if st.session_state.post_data:
         if st.button("❌ 취소", use_container_width=True):
             st.session_state.post_data = None
             st.rerun()
+
+    with st.expander("📌 메일 쿨타임 대비: 본문 HTML 복사 코드"):
+        st.caption("단시간 연속 발행으로 메일이 튕겼을 때, 아래 코드를 복사해 Blogger 글쓰기(HTML 모드)에 바로 붙여넣으세요.")
+        st.code(final_html, language="html")

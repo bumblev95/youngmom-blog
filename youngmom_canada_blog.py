@@ -3,6 +3,7 @@ from google import genai
 import requests
 import smtplib
 import random
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -30,6 +31,19 @@ if "post_data" not in st.session_state:
     st.session_state.post_data = None
 if "draft_inputs" not in st.session_state:
     st.session_state.draft_inputs = {}
+if "last_api_call" not in st.session_state:
+    st.session_state.last_api_call = 0.0
+
+# 429 방지용 쿨타임 검사 (기본 15초 대기)
+def enforce_cooldown(cooldown_seconds=15):
+    now = time.time()
+    elapsed = now - st.session_state.last_api_call
+    if elapsed < cooldown_seconds:
+        wait_time = int(cooldown_seconds - elapsed) + 1
+        st.warning(f"⏳ 구글 무료 서버 안정화 대기 중이에요! **{wait_time}초**만 천천히 기다렸다가 눌러주세요.")
+        return False
+    st.session_state.last_api_call = now
+    return True
 
 def clean_unsplash_url(raw_url):
     if "?" in raw_url:
@@ -60,7 +74,7 @@ def get_unsplash_photo(query_keyword, page=1):
 
 client = genai.Client(api_key=api_key)
 
-# 최신 3.8 모델 우선 호출 & 3.6 자동 백업 함수
+# 429(속도 초과) 및 503(서버 과부하) 자동 우회 & 5초 휴식 재시도 함수
 def generate_content_with_fallback(prompt_text):
     models_to_try = ["gemini-3.8-flash", "gemini-3.6-flash"]
     last_err = None
@@ -74,6 +88,8 @@ def generate_content_with_fallback(prompt_text):
                 return resp.text.strip()
         except Exception as e:
             last_err = e
+            # 429나 503 에러 발생 시 토큰 한도 리셋을 위해 5초 대기 후 다음 백업 모델 호출
+            time.sleep(5)
             continue
     raise last_err
 
@@ -115,29 +131,30 @@ with col_ask:
         if not topic.strip():
             st.warning("주제를 먼저 입력해 주세요.")
         else:
-            with st.spinner("AI 에디터가 질문을 준비하고 있습니다 (3.8 우선, 혼잡 시 3.6 자동 우회)..."):
-                try:
-                    q_prompt = f"""
-                    당신은 노련한 캐나다 생활 블로그 편집자입니다.
-                    주제: '{topic}', 작성자 경험: '{initial_exp}'
-                    참고 자료: '{ref_data}'
+            if enforce_cooldown(15):
+                with st.spinner("AI 에디터가 생생한 현장감을 위한 질문을 준비하고 있습니다..."):
+                    try:
+                        q_prompt = f"""
+                        당신은 노련한 캐나다 생활 블로그 편집자입니다.
+                        주제: '{topic}', 작성자 경험: '{initial_exp}'
+                        참고 자료: '{ref_data}'
 
-                    이 글이 구글 애드센스의 '저가치 콘텐츠' 판정을 피하고 100% 사람 냄새 나는 E-E-A-T 글이 되도록, 
-                    작성자에게 현장 디테일을 물어볼 질문 2~3가지만 다정하게 작성해 주세요.
-                    (구체적 비용 $, 시간, 장소, 실패담이나 주의할 점 위주)
-                    """
-                    questions_text = generate_content_with_fallback(q_prompt)
-                    st.session_state.interview_questions = questions_text
-                    st.session_state.draft_inputs = {
-                        "category": category,
-                        "topic": topic,
-                        "initial_exp": initial_exp,
-                        "ref_data": ref_data
-                    }
-                    st.session_state.post_data = None
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"질문 생성 오류: {e}")
+                        이 글이 구글 애드센스의 '저가치 콘텐츠' 판정을 완벽히 피하고 100% 사람 냄새 나는 E-E-A-T 글이 되도록, 
+                        작성자에게 현장 디테일을 물어볼 인터뷰 질문 2~3가지만 다정하게 작성해 주세요.
+                        (구체적 비용 $, 대기 시간, 매장 위치, 당황했던 실패담이나 주의할 점 위주)
+                        """
+                        questions_text = generate_content_with_fallback(q_prompt)
+                        st.session_state.interview_questions = questions_text
+                        st.session_state.draft_inputs = {
+                            "category": category,
+                            "topic": topic,
+                            "initial_exp": initial_exp,
+                            "ref_data": ref_data
+                        }
+                        st.session_state.post_data = None
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"질문 생성 중 잠시 지연이 발생했습니다: {e}")
 
 with col_direct:
     if st.button("⏩ 질문 없이 바로 글 생성하기", use_container_width=True):
@@ -158,7 +175,7 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
     if st.session_state.interview_questions != "":
         st.info("💡 **AI 에디터의 질문:**\n\n" + st.session_state.interview_questions)
         user_answers = st.text_area(
-            "엄마의 답변 (단어나 짧은 문장으로 대충 적으셔도 살을 붙여드립니다!)",
+            "엄마의 답변 (단어나 짧은 문장으로 편하게 적으시면 AI가 멋지게 살을 붙여줍니다!)",
             placeholder="예:\n1. 25불 정도였고 남쪽 코스트코였어요.\n2. 예약 앱을 미리 안 봐서 3주 밀린 게 멘붕이었죠.\n3. 영수증 사진 꼭 찍어두라고 하고 싶어요.",
             height=120
         )
@@ -166,83 +183,84 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
         user_answers = ""
 
     if st.button("✨ 인터뷰 답변 녹여서 풍성한 장문 원고 집필하기", type="primary", use_container_width=True):
-        with st.spinner("구글 고품질 기준(1,500자 이상)에 맞춰 본문을 작성 중입니다..."):
-            try:
-                saved = st.session_state.draft_inputs
-                write_prompt = f"""
-                당신은 캐나다 알버타에 거주하는 이민 선배이자 솔직하고 다정한 인기 살림 블로거 'YoungMom'입니다.
-                구글 애드센스 심사 봇이 인정할 수 있도록 충분한 분량(공백 제외 1,500자 내외)과 깊이 있는 1인칭 E-E-A-T 원고를 집필하세요.
+        if enforce_cooldown(15):
+            with st.spinner("구글 E-E-A-T 기준(1,500자 이상)에 맞춰 본문을 꼼꼼하게 작성 중입니다..."):
+                try:
+                    saved = st.session_state.draft_inputs
+                    write_prompt = f"""
+                    당신은 캐나다 알버타에 거주하는 이민 선배이자 솔직하고 다정한 인기 살림 블로거 'YoungMom'입니다.
+                    구글 애드센스 심사 봇이 인정할 수 있도록 충분한 분량(공백 제외 1,500자 내외)과 깊이 있는 1인칭 E-E-A-T 원고를 집필하세요.
 
-                [기본 정보]
-                - 카테고리: {saved['category']}
-                - 핵심 주제: {saved['topic']}
-                - 초기 생각: {saved['initial_exp']}
-                - 참고 자료: {saved['ref_data']}
-                - 작성자가 직접 답한 현장 인터뷰 내용: "{user_answers}"
+                    [기본 정보]
+                    - 카테고리: {saved['category']}
+                    - 핵심 주제: {saved['topic']}
+                    - 초기 생각: {saved['initial_exp']}
+                    - 참고 자료: {saved['ref_data']}
+                    - 작성자가 직접 답한 현장 인터뷰 내용: "{user_answers}"
 
-                [필수 집필 규칙]
-                1. 첫 줄: 반드시 "TITLE: [현지 맘의 느낌이 살아있는 매력적인 제목]"
-                2. 절대로 짧게 요약하지 말고, 각 문단마다 상황 설명과 구체적 묘사를 풍부하게 전개하세요.
-                3. 기계식 어조 절대 금지 (~에 대해 알아보겠습니다 등 배제).
-                4. 다정하고 똑 부러지는 말투(~해요, ~더라고요, ~했답니다).
-                5. 구성:
-                   - 도입부: 작성자의 실제 경험/인터뷰 내용을 바탕으로 한 현실 공감 오프닝 (상황과 감정 묘사)
-                   - 본문 1: 직접 부딪치며 배운 실전 노하우와 상세 비용($), 절약 요령
-                   - 본문 2 직전 줄에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 넣기
-                   - 본문 2: 현지 초보들이 가장 흔히 겪는 실수와 현실적인 대처법
-                   - 본문 3: 알아두면 유용한 꿀팁 한 가지 더 (추천 앱, 방문 시간대, 서류 등)
-                   - 맺음말: 독자들에게 건네는 따뜻한 응원 및 댓글 유도 질문
-                6. 글 맨 마지막 두 줄:
-                   THUMBNAIL_KEYWORD: [글 분위기 영어 스톡 검색어 2~3단어]
-                   BODY_KEYWORD: [본문 세부 내용 영어 스톡 검색어 2~3단어]
-                """
+                    [필수 집필 규칙]
+                    1. 첫 줄: 반드시 "TITLE: [현지 맘의 느낌이 살아있는 매력적인 제목]"
+                    2. 절대로 짧게 요약하지 말고, 각 문단마다 상황 설명과 구체적 묘사를 풍부하게 전개하세요.
+                    3. 기계식 어조 절대 금지 (~에 대해 알아보겠습니다 등 배제).
+                    4. 다정하고 똑 부러지는 말투(~해요, ~더라고요, ~했답니다).
+                    5. 구성:
+                       - 도입부: 작성자의 실제 경험/인터뷰 내용을 바탕으로 한 현실 공감 오프닝 (상황과 감정 묘사)
+                       - 본문 1: 직접 부딪치며 배운 실전 노하우와 상세 비용($), 절약 요령
+                       - 본문 2 직전 줄에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 넣기
+                       - 본문 2: 현지 초보들이 가장 흔히 겪는 실수와 현실적인 대처법
+                       - 본문 3: 알아두면 유용한 꿀팁 한 가지 더 (추천 앱, 방문 시간대, 서류 등)
+                       - 맺음말: 독자들에게 건네는 따뜻한 응원 및 댓글 유도 질문
+                    6. 글 맨 마지막 두 줄:
+                       THUMBNAIL_KEYWORD: [글 분위기 영어 스톡 검색어 2~3단어]
+                       BODY_KEYWORD: [본문 세부 내용 영어 스톡 검색어 2~3단어]
+                    """
 
-                full_text = generate_content_with_fallback(write_prompt)
+                    full_text = generate_content_with_fallback(write_prompt)
 
-                post_title = saved['topic']
-                if "TITLE:" in full_text:
-                    parts = full_text.split("TITLE:", 1)[1].split("\n", 1)
-                    post_title = parts[0].strip()
-                    main_content = parts[1] if len(parts) > 1 else ""
-                else:
-                    main_content = full_text
-
-                thumb_kw = "canada daily life"
-                body_kw = "lifestyle living"
-
-                if "THUMBNAIL_KEYWORD:" in main_content:
-                    split_body, kw_tail = main_content.rsplit("THUMBNAIL_KEYWORD:", 1)
-                    final_body = split_body.strip()
-                    if "BODY_KEYWORD:" in kw_tail:
-                        t_part, b_part = kw_tail.split("BODY_KEYWORD:", 1)
-                        thumb_kw = t_part.strip()
-                        body_kw = b_part.strip()
+                    post_title = saved['topic']
+                    if "TITLE:" in full_text:
+                        parts = full_text.split("TITLE:", 1)[1].split("\n", 1)
+                        post_title = parts[0].strip()
+                        main_content = parts[1] if len(parts) > 1 else ""
                     else:
-                        thumb_kw = kw_tail.strip()
-                else:
-                    final_body = main_content.strip()
+                        main_content = full_text
 
-                if not final_body:
-                    final_body = full_text
+                    thumb_kw = "canada daily life"
+                    body_kw = "lifestyle living"
 
-                thumb_url = get_unsplash_photo(thumb_kw, page=1)
-                body_url = get_unsplash_photo(body_kw, page=1)
+                    if "THUMBNAIL_KEYWORD:" in main_content:
+                        split_body, kw_tail = main_content.rsplit("THUMBNAIL_KEYWORD:", 1)
+                        final_body = split_body.strip()
+                        if "BODY_KEYWORD:" in kw_tail:
+                            t_part, b_part = kw_tail.split("BODY_KEYWORD:", 1)
+                            thumb_kw = t_part.strip()
+                            body_kw = b_part.strip()
+                        else:
+                            thumb_kw = kw_tail.strip()
+                    else:
+                        final_body = main_content.strip()
 
-                st.session_state.post_data = {
-                    "title": post_title,
-                    "body": final_body,
-                    "thumb_kw": thumb_kw,
-                    "body_kw": body_kw,
-                    "thumb_page": 1,
-                    "body_page": 1,
-                    "thumb_url": thumb_url,
-                    "body_url": body_url
-                }
-                st.session_state.interview_questions = None
-                st.rerun()
+                    if not final_body:
+                        final_body = full_text
 
-            except Exception as e:
-                st.error(f"글 집필 중 오류 발생: {e}")
+                    thumb_url = get_unsplash_photo(thumb_kw, page=1)
+                    body_url = get_unsplash_photo(body_kw, page=1)
+
+                    st.session_state.post_data = {
+                        "title": post_title,
+                        "body": final_body,
+                        "thumb_kw": thumb_kw,
+                        "body_kw": body_kw,
+                        "thumb_page": 1,
+                        "body_page": 1,
+                        "thumb_url": thumb_url,
+                        "body_url": body_url
+                    }
+                    st.session_state.interview_questions = None
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"글 집필 중 일시적 오류가 발생했습니다: {e}")
 
 # --- [3단계: 검토, 분량 늘리기 및 최종 발행] ---
 if st.session_state.post_data:
@@ -277,28 +295,29 @@ if st.session_state.post_data:
             st.rerun()
 
     if st.button("➕ 본문 살 붙여서 더 길게 늘리기 (실전 팁 & Q&A 추가)", use_container_width=True):
-        with st.spinner("기존 글 흐름을 유지하며 경험 디테일과 꿀팁을 확장하고 있습니다..."):
-            try:
-                expand_prompt = f"""
-                당신은 캐나다 생활 블로거 'YoungMom'입니다.
-                아래 작성된 기존 블로그 글의 분량이 다소 짧아 보강이 필요합니다.
-                기존 글의 어조(~해요, ~했답니다)와 흐름을 그대로 유지하면서, 
-                본문에 다음 내용을 추가하여 전체 분량을 1.5배~2배 수준으로 대폭 늘려 다시 작성해 주세요:
+        if enforce_cooldown(15):
+            with st.spinner("기존 글 흐름을 유지하며 경험 디테일과 꿀팁을 확장하고 있습니다..."):
+                try:
+                    expand_prompt = f"""
+                    당신은 캐나다 생활 블로거 'YoungMom'입니다.
+                    아래 작성된 기존 블로그 글의 분량이 다소 짧아 보강이 필요합니다.
+                    기존 글의 어조(~해요, ~했답니다)와 흐름을 그대로 유지하면서, 
+                    본문에 다음 내용을 추가하여 전체 분량을 1.5배~2배 수준으로 대폭 늘려 다시 작성해 주세요:
 
-                [추가/보강할 내용]
-                1. 현지에서 직접 겪은 구체적인 사례나 상황 묘사 보강
-                2. 독자들이 가장 궁금해할 만한 '실전 자주 묻는 질문(Q&A) 2가지'를 본문 후반부에 자연스럽게 추가
-                3. 반드시 본문 중간에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 유지
+                    [추가/보강할 내용]
+                    1. 현지에서 직접 겪은 구체적인 사례나 상황 묘사 보강
+                    2. 독자들이 가장 궁금해할 만한 '실전 자주 묻는 질문(Q&A) 2가지'를 본문 후반부에 자연스럽게 추가
+                    3. 반드시 본문 중간에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 유지
 
-                [기존 글]:
-                {st.session_state.post_data['body']}
-                """
-                expanded_text = generate_content_with_fallback(expand_prompt)
-                st.session_state.post_data["body"] = expanded_text
-                st.success("글 분량이 풍성하게 확장되었습니다!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"분량 확장 오류: {e}")
+                    [기존 글]:
+                    {st.session_state.post_data['body']}
+                    """
+                    expanded_text = generate_content_with_fallback(expand_prompt)
+                    st.session_state.post_data["body"] = expanded_text
+                    st.success("글 분량이 풍성하게 확장되었습니다!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"분량 확장 중 오류 발생: {e}")
 
     reviewed_body = st.text_area("본문 내용", value=st.session_state.post_data["body"], height=400)
 

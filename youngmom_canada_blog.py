@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 st.set_page_config(page_title="YoungMom Canada 블로그 비서", page_icon="🍁", layout="centered")
 
 st.title("🍁 YoungMom Canada 인터뷰형 글 생성기")
-st.caption("AI 에디터의 질문과 현장 디테일, 넉넉한 분량으로 구글 E-E-A-T 기준을 충족합니다.")
+st.caption("AI 에디터의 간결한 질문과 현장 디테일로 구글 E-E-A-T 기준을 충족합니다.")
 st.link_button("📊 내 블로그 방문자 통계 보러가기", "https://www.blogger.com/go/stats")
 
 # 1. 환경 변수 연동
@@ -34,13 +34,13 @@ if "draft_inputs" not in st.session_state:
 if "last_api_call" not in st.session_state:
     st.session_state.last_api_call = 0.0
 
-# 429 방지용 쿨타임 검사 (기본 15초 대기)
-def enforce_cooldown(cooldown_seconds=15):
+# 429 방지용 쿨타임 검사 (기본 12초 대기)
+def enforce_cooldown(cooldown_seconds=12):
     now = time.time()
     elapsed = now - st.session_state.last_api_call
     if elapsed < cooldown_seconds:
         wait_time = int(cooldown_seconds - elapsed) + 1
-        st.warning(f"⏳ 구글 무료 서버 안정화 대기 중이에요! **{wait_time}초**만 천천히 기다렸다가 눌러주세요.")
+        st.warning(f"⏳ 서버 안정화 대기 중이에요! **{wait_time}초**만 천천히 기다렸다가 눌러주세요.")
         return False
     st.session_state.last_api_call = now
     return True
@@ -74,7 +74,7 @@ def get_unsplash_photo(query_keyword, page=1):
 
 client = genai.Client(api_key=api_key)
 
-# 429(속도 초과) 및 503(서버 과부하) 자동 우회 & 5초 휴식 재시도 함수
+# 429 / 503 대응 폴백 함수 (3.8 우선, 실패 시 3.6 백업)
 def generate_content_with_fallback(prompt_text):
     models_to_try = ["gemini-3.8-flash", "gemini-3.6-flash"]
     last_err = None
@@ -88,8 +88,7 @@ def generate_content_with_fallback(prompt_text):
                 return resp.text.strip()
         except Exception as e:
             last_err = e
-            # 429나 503 에러 발생 시 토큰 한도 리셋을 위해 5초 대기 후 다음 백업 모델 호출
-            time.sleep(5)
+            time.sleep(4)
             continue
     raise last_err
 
@@ -131,17 +130,20 @@ with col_ask:
         if not topic.strip():
             st.warning("주제를 먼저 입력해 주세요.")
         else:
-            if enforce_cooldown(15):
-                with st.spinner("AI 에디터가 생생한 현장감을 위한 질문을 준비하고 있습니다..."):
+            if enforce_cooldown(12):
+                with st.spinner("AI 에디터가 꼭 필요한 핵심 질문만 간결하게 추리고 있습니다..."):
                     try:
+                        # 토큰 낭비를 원천 차단하는 초경량 질문 프롬프트
                         q_prompt = f"""
-                        당신은 노련한 캐나다 생활 블로그 편집자입니다.
                         주제: '{topic}', 작성자 경험: '{initial_exp}'
                         참고 자료: '{ref_data}'
 
-                        이 글이 구글 애드센스의 '저가치 콘텐츠' 판정을 완벽히 피하고 100% 사람 냄새 나는 E-E-A-T 글이 되도록, 
-                        작성자에게 현장 디테일을 물어볼 인터뷰 질문 2~3가지만 다정하게 작성해 주세요.
-                        (구체적 비용 $, 대기 시간, 매장 위치, 당황했던 실패담이나 주의할 점 위주)
+                        구글 애드센스 E-E-A-T 통과를 위해 독자들이 궁금해할 핵심 현장 디테일 질문 딱 3가지만 작성하세요.
+
+                        [출력 절대 규칙 - 위반 금지]
+                        1. 인사말, 서론, 공감 멘트, 격려 문구, 예시 설명 등 부연설명을 절대로 쓰지 마세요.
+                        2. 오직 질문 3개만 번호(1., 2., 3.) 매겨 각 한 줄씩 간결하고 명확하게 질문하세요.
+                        3. 질문 내용: 구체적 비용($), 지점/위치, 소요/대기 시간, 꼭 전하고 싶은 주의사항 위주.
                         """
                         questions_text = generate_content_with_fallback(q_prompt)
                         st.session_state.interview_questions = questions_text
@@ -154,7 +156,7 @@ with col_ask:
                         st.session_state.post_data = None
                         st.rerun()
                     except Exception as e:
-                        st.error(f"질문 생성 중 잠시 지연이 발생했습니다: {e}")
+                        st.error(f"질문 생성 중 지연 발생: {e}")
 
 with col_direct:
     if st.button("⏩ 질문 없이 바로 글 생성하기", use_container_width=True):
@@ -173,18 +175,18 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
     st.markdown("### 💬 2단계: AI 에디터 인터뷰")
     
     if st.session_state.interview_questions != "":
-        st.info("💡 **AI 에디터의 질문:**\n\n" + st.session_state.interview_questions)
+        st.info("💡 **AI 에디터의 핵심 질문:**\n\n" + st.session_state.interview_questions)
         user_answers = st.text_area(
-            "엄마의 답변 (단어나 짧은 문장으로 편하게 적으시면 AI가 멋지게 살을 붙여줍니다!)",
-            placeholder="예:\n1. 25불 정도였고 남쪽 코스트코였어요.\n2. 예약 앱을 미리 안 봐서 3주 밀린 게 멘붕이었죠.\n3. 영수증 사진 꼭 찍어두라고 하고 싶어요.",
-            height=120
+            "엄마의 답변 (단어나 짧은 문장으로 편하게 툭툭 적으세요!)",
+            placeholder="예:\n1. 코스트코 남쪽 지점이었고 총 650불 들었어요.\n2. 예약 깜빡해서 2주 기다렸네요.\n3. 스틸 림 미리 사두는 게 공임비 아끼는 길이에요.",
+            height=110
         )
     else:
         user_answers = ""
 
     if st.button("✨ 인터뷰 답변 녹여서 풍성한 장문 원고 집필하기", type="primary", use_container_width=True):
-        if enforce_cooldown(15):
-            with st.spinner("구글 E-E-A-T 기준(1,500자 이상)에 맞춰 본문을 꼼꼼하게 작성 중입니다..."):
+        if enforce_cooldown(12):
+            with st.spinner("구글 고품질 기준(1,500자 이상)에 맞춰 본문을 꼼꼼하게 작성 중입니다..."):
                 try:
                     saved = st.session_state.draft_inputs
                     write_prompt = f"""
@@ -196,20 +198,20 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                     - 핵심 주제: {saved['topic']}
                     - 초기 생각: {saved['initial_exp']}
                     - 참고 자료: {saved['ref_data']}
-                    - 작성자가 직접 답한 현장 인터뷰 내용: "{user_answers}"
+                    - 작성자의 현장 답변: "{user_answers}"
 
                     [필수 집필 규칙]
                     1. 첫 줄: 반드시 "TITLE: [현지 맘의 느낌이 살아있는 매력적인 제목]"
-                    2. 절대로 짧게 요약하지 말고, 각 문단마다 상황 설명과 구체적 묘사를 풍부하게 전개하세요.
-                    3. 기계식 어조 절대 금지 (~에 대해 알아보겠습니다 등 배제).
-                    4. 다정하고 똑 부러지는 말투(~해요, ~더라고요, ~했답니다).
+                    2. 기계식 어조 절대 금지 (~에 대해 알아보겠습니다 등 배제).
+                    3. 이웃에게 커피 마시며 솔직하게 털어놓듯 다정하고 똑 부러지는 말투(~해요, ~더라고요, ~했답니다).
+                    4. [현장 답변 내용]에 담긴 금액($), 위치, 대기 시간, 주의점을 글의 오프닝과 본문에 생생하게 녹여내세요.
                     5. 구성:
-                       - 도입부: 작성자의 실제 경험/인터뷰 내용을 바탕으로 한 현실 공감 오프닝 (상황과 감정 묘사)
-                       - 본문 1: 직접 부딪치며 배운 실전 노하우와 상세 비용($), 절약 요령
+                       - 도입부: 실제 겪은 일화와 감정 묘사를 담은 현실 공감 오프닝
+                       - 본문 1: 직접 부딪치며 배운 실전 노하우와 구체적 비용($), 절약 요령
                        - 본문 2 직전 줄에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 넣기
                        - 본문 2: 현지 초보들이 가장 흔히 겪는 실수와 현실적인 대처법
-                       - 본문 3: 알아두면 유용한 꿀팁 한 가지 더 (추천 앱, 방문 시간대, 서류 등)
-                       - 맺음말: 독자들에게 건네는 따뜻한 응원 및 댓글 유도 질문
+                       - 본문 3: 알아두면 유용한 꿀팁 한 가지 더 (추천 앱, 방문 시간대 등)
+                       - 맺음말: 독자들에게 건네는 따뜻한 응원 및 소통 질문
                     6. 글 맨 마지막 두 줄:
                        THUMBNAIL_KEYWORD: [글 분위기 영어 스톡 검색어 2~3단어]
                        BODY_KEYWORD: [본문 세부 내용 영어 스톡 검색어 2~3단어]
@@ -260,7 +262,7 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                     st.rerun()
 
                 except Exception as e:
-                    st.error(f"글 집필 중 일시적 오류가 발생했습니다: {e}")
+                    st.error(f"글 집필 중 일시적 오류: {e}")
 
 # --- [3단계: 검토, 분량 늘리기 및 최종 발행] ---
 if st.session_state.post_data:
@@ -295,19 +297,17 @@ if st.session_state.post_data:
             st.rerun()
 
     if st.button("➕ 본문 살 붙여서 더 길게 늘리기 (실전 팁 & Q&A 추가)", use_container_width=True):
-        if enforce_cooldown(15):
+        if enforce_cooldown(12):
             with st.spinner("기존 글 흐름을 유지하며 경험 디테일과 꿀팁을 확장하고 있습니다..."):
                 try:
                     expand_prompt = f"""
                     당신은 캐나다 생활 블로거 'YoungMom'입니다.
-                    아래 작성된 기존 블로그 글의 분량이 다소 짧아 보강이 필요합니다.
-                    기존 글의 어조(~해요, ~했답니다)와 흐름을 그대로 유지하면서, 
-                    본문에 다음 내용을 추가하여 전체 분량을 1.5배~2배 수준으로 대폭 늘려 다시 작성해 주세요:
+                    아래 블로그 글의 흐름과 말투(~해요, ~했답니다)를 완벽히 유지하면서 분량을 1.5배 수준으로 확장하세요:
 
-                    [추가/보강할 내용]
-                    1. 현지에서 직접 겪은 구체적인 사례나 상황 묘사 보강
-                    2. 독자들이 가장 궁금해할 만한 '실전 자주 묻는 질문(Q&A) 2가지'를 본문 후반부에 자연스럽게 추가
-                    3. 반드시 본문 중간에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 유지
+                    [추가 내용]
+                    1. 현지에서 겪은 구체적인 상황 묘사 강화
+                    2. 독자 실전 자주 묻는 질문(Q&A) 2가지를 본문 하단에 자연스럽게 추가
+                    3. 본문 중간에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 필수 유지
 
                     [기존 글]:
                     {st.session_state.post_data['body']}
@@ -317,7 +317,7 @@ if st.session_state.post_data:
                     st.success("글 분량이 풍성하게 확장되었습니다!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"분량 확장 중 오류 발생: {e}")
+                    st.error(f"분량 확장 오류: {e}")
 
     reviewed_body = st.text_area("본문 내용", value=st.session_state.post_data["body"], height=400)
 

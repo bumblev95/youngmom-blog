@@ -112,15 +112,17 @@ topic = st.text_input(
 )
 
 initial_exp = st.text_area(
-    "3. 생각나는 경험이나 상황 (짧아도 OK)", 
-    placeholder="예: 올리브유 사러 갔다가 가격 보고 놀람 / 정비소 예약 놓쳐서 고생함 / 벽 못 자국 때문에 집주인이랑 실랑이함",
-    height=80
+    "3. 생각나는 경험이나 상황 (짧게 메모하듯 적으셔도 OK)", 
+    placeholder="예: 올리브유 사러 갔다가 25불 찍혀서 놀람 / 정비소 예약 놓쳐서 2주 기다림 / 서류 하나 빠져서 레지스트리 헛걸음함",
+    height=90
 )
+
+st.caption("💡 **글이 훨씬 진짜처럼 살아나는 꿀팁:** 대략적인 금액($), 방문했던 매장 위치, 혹은 당황했던 실패담 같은 사소한 디테일을 위 3번에 함께 적어주시면 AI가 훨씬 풍성하게 살려냅니다.")
 
 ref_data = st.text_area(
     "4. 참고 자료나 뉴스 링크/내용 (선택)",
-    placeholder="기사나 공지문 내용이 있다면 편하게 붙여넣으세요.",
-    height=80
+    placeholder="기사나 공식 안내문 내용이 있다면 편하게 복사해서 붙여넣으세요.",
+    height=70
 )
 
 col_ask, col_direct = st.columns(2)
@@ -133,9 +135,8 @@ with col_ask:
             if enforce_cooldown(12):
                 with st.spinner("AI 에디터가 꼭 필요한 핵심 질문만 간결하게 추리고 있습니다..."):
                     try:
-                        # 토큰 낭비를 원천 차단하는 초경량 질문 프롬프트
                         q_prompt = f"""
-                        주제: '{topic}', 작성자 경험: '{initial_exp}'
+                        주제: '{topic}', 작성자 경험 메모: '{initial_exp}'
                         참고 자료: '{ref_data}'
 
                         구글 애드센스 E-E-A-T 통과를 위해 독자들이 궁금해할 핵심 현장 디테일 질문 딱 3가지만 작성하세요.
@@ -186,9 +187,10 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
 
     if st.button("✨ 인터뷰 답변 녹여서 풍성한 장문 원고 집필하기", type="primary", use_container_width=True):
         if enforce_cooldown(12):
-            with st.spinner("구글 고품질 기준(1,500자 이상)에 맞춰 본문을 꼼꼼하게 작성 중입니다..."):
+            with st.spinner("구글 E-E-A-T 고품질 기준(1,500자 이상)에 맞춰 본문과 태그를 작성 중입니다..."):
                 try:
                     saved = st.session_state.draft_inputs
+
                     write_prompt = f"""
                     당신은 캐나다 알버타에 거주하는 이민 선배이자 솔직하고 다정한 인기 살림 블로거 'YoungMom'입니다.
                     구글 애드센스 심사 봇이 인정할 수 있도록 충분한 분량(공백 제외 1,500자 내외)과 깊이 있는 1인칭 E-E-A-T 원고를 집필하세요.
@@ -196,23 +198,24 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                     [기본 정보]
                     - 카테고리: {saved['category']}
                     - 핵심 주제: {saved['topic']}
-                    - 초기 생각: {saved['initial_exp']}
+                    - 작성자의 기본 경험/메모: {saved['initial_exp']}
                     - 참고 자료: {saved['ref_data']}
-                    - 작성자의 현장 답변: "{user_answers}"
+                    - 작성자의 현장 인터뷰 답변: "{user_answers}"
 
                     [필수 집필 규칙]
                     1. 첫 줄: 반드시 "TITLE: [현지 맘의 느낌이 살아있는 매력적인 제목]"
                     2. 기계식 어조 절대 금지 (~에 대해 알아보겠습니다 등 배제).
                     3. 이웃에게 커피 마시며 솔직하게 털어놓듯 다정하고 똑 부러지는 말투(~해요, ~더라고요, ~했답니다).
-                    4. [현장 답변 내용]에 담긴 금액($), 위치, 대기 시간, 주의점을 글의 오프닝과 본문에 생생하게 녹여내세요.
+                    4. 경험 메모와 인터뷰 답변에 나온 구체적인 금액($), 위치, 대기 시간, 실수담을 오프닝과 본문에 생생하게 녹여내세요. (중복되는 내용은 자연스럽게 하나로 통합)
                     5. 구성:
                        - 도입부: 실제 겪은 일화와 감정 묘사를 담은 현실 공감 오프닝
                        - 본문 1: 직접 부딪치며 배운 실전 노하우와 구체적 비용($), 절약 요령
                        - 본문 2 직전 줄에 독립된 한 줄로 "[INSERT_BODY_IMAGE]" 태그 넣기
-                       - 본문 2: 현지 초보들이 가장 흔히 겪는 실수와 현실적인 대처법
-                       - 본문 3: 알아두면 유용한 꿀팁 한 가지 더 (추천 앱, 방문 시간대 등)
+                       - 본문 2: 현지 초보들이 가장 흔히 겪는 실수/실패담과 현실적인 대처법
+                       - 본문 3: 알아두면 유용한 꿀팁 한 가지 더 (추천 루틴, 시간대, 서류 등)
                        - 맺음말: 독자들에게 건네는 따뜻한 응원 및 소통 질문
-                    6. 글 맨 마지막 두 줄:
+                    6. 글 맨 마지막 세 줄:
+                       TAGS: [블로그 검색 최적화용 쉼표 구분 태그 3~4개, 예: 캐나다생활, 알버타이민, 코스트코꿀팁]
                        THUMBNAIL_KEYWORD: [글 분위기 영어 스톡 검색어 2~3단어]
                        BODY_KEYWORD: [본문 세부 내용 영어 스톡 검색어 2~3단어]
                     """
@@ -227,10 +230,22 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                     else:
                         main_content = full_text
 
+                    tags_str = "캐나다생활, 알버타살림, 캐나다이민"
                     thumb_kw = "canada daily life"
                     body_kw = "lifestyle living"
 
-                    if "THUMBNAIL_KEYWORD:" in main_content:
+                    # 태그 및 이미지 키워드 추출
+                    if "TAGS:" in main_content:
+                        split_body, tail = main_content.rsplit("TAGS:", 1)
+                        final_body = split_body.strip()
+                        lines = tail.strip().split("\n")
+                        tags_str = lines[0].strip()
+                        for line in lines[1:]:
+                            if "THUMBNAIL_KEYWORD:" in line:
+                                thumb_kw = line.split("THUMBNAIL_KEYWORD:", 1)[1].strip()
+                            elif "BODY_KEYWORD:" in line:
+                                body_kw = line.split("BODY_KEYWORD:", 1)[1].strip()
+                    elif "THUMBNAIL_KEYWORD:" in main_content:
                         split_body, kw_tail = main_content.rsplit("THUMBNAIL_KEYWORD:", 1)
                         final_body = split_body.strip()
                         if "BODY_KEYWORD:" in kw_tail:
@@ -251,6 +266,7 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                     st.session_state.post_data = {
                         "title": post_title,
                         "body": final_body,
+                        "tags": tags_str,
                         "thumb_kw": thumb_kw,
                         "body_kw": body_kw,
                         "thumb_page": 1,
@@ -268,7 +284,6 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
 if st.session_state.post_data:
     st.divider()
     st.markdown("### 🔍 3단계: 최종 검토 및 분량 조절")
-    st.info("💡 본문 분량이 아쉽다면 아래 **[➕ 본문 살 붙여서 더 길게 늘리기]** 버튼을 눌러보세요!")
 
     reviewed_title = st.text_input("블로그 제목", value=st.session_state.post_data["title"])
 
@@ -319,7 +334,19 @@ if st.session_state.post_data:
                 except Exception as e:
                     st.error(f"분량 확장 오류: {e}")
 
-    reviewed_body = st.text_area("본문 내용", value=st.session_state.post_data["body"], height=400)
+    # 실시간 글자 수(공백 제외) 신호등 배지 계산
+    raw_body_text = st.session_state.post_data["body"].replace("[INSERT_BODY_IMAGE]", "")
+    char_count_no_spaces = len(raw_body_text.replace(" ", "").replace("\n", ""))
+
+    if char_count_no_spaces >= 1200:
+        st.success(f"🟢 **현재 본문 글자 수:** 공백 제외 **{char_count_no_spaces:,}자** (구글 고품질 E-E-A-T 기준 충족! ✅)")
+    else:
+        st.warning(f"🟠 **현재 본문 글자 수:** 공백 제외 **{char_count_no_spaces:,}자** (조금 짧아요! 위의 '➕ 본문 살 붙여서 더 길게 늘리기' 버튼을 눌러보세요.)")
+
+    reviewed_body = st.text_area("본문 내용", value=st.session_state.post_data["body"], height=380)
+
+    # 추천 태그 입력 및 확인 칸
+    reviewed_tags = st.text_input("🏷️ 추천 태그 (쉼표로 구분되어 글 맨 아래에 자동 첨부됩니다)", value=st.session_state.post_data.get("tags", "캐나다생활, 알버타살림, 캐나다이민"))
 
     thumb_url = st.session_state.post_data["thumb_url"]
     body_url = st.session_state.post_data["body_url"]
@@ -330,8 +357,13 @@ if st.session_state.post_data:
     else:
         html_body_text = reviewed_body + body_img_html
 
+    # 해시태그 HTML 생성
+    tag_list = [t.strip() for t in reviewed_tags.split(",") if t.strip()]
+    hashtags_html = " ".join([f"#{t.replace('#', '')}" for t in tag_list])
+    tag_footer = f'<p style="margin-top:35px; color:#666; font-size:14px;"><b>태그:</b> {hashtags_html}</p>'
+
     formatted_body = html_body_text.strip().replace("\n", "<br>")
-    final_html = f"""<html><body><div style="font-family: sans-serif; line-height: 1.8; font-size: 16px; color: #222;"><p style="text-align:center; margin-bottom:20px;"><img src="{thumb_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="대표 이미지"></p>{formatted_body}</div></body></html>"""
+    final_html = f"""<html><body><div style="font-family: sans-serif; line-height: 1.8; font-size: 16px; color: #222;"><p style="text-align:center; margin-bottom:20px;"><img src="{thumb_url}" style="max-width:100%; height:auto; border-radius:8px;" alt="대표 이미지"></p>{formatted_body}{tag_footer}</div></body></html>"""
 
     col_send, col_cancel = st.columns([3, 1])
     with col_send:
@@ -343,7 +375,7 @@ if st.session_state.post_data:
                     msg['From'] = sender_email
                     msg['To'] = blogger_email
 
-                    plain_text = reviewed_body.replace("[INSERT_BODY_IMAGE]", "")
+                    plain_text = reviewed_body.replace("[INSERT_BODY_IMAGE]", "") + f"\n\n태그: {hashtags_html}"
                     part1 = MIMEText(plain_text, 'plain', 'utf-8')
                     part2 = MIMEText(final_html, 'html', 'utf-8')
 

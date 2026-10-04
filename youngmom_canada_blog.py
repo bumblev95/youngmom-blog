@@ -132,6 +132,12 @@ ref_data = st.text_area(
     height=70
 )
 
+# [신규] 사진 검색어 사전 지정 (선택)
+with st.expander("🖼️ 사진 검색어 미리 정하기 (선택 - 비워두면 AI가 자동 추천)"):
+    st.caption("원하는 사진 분위기가 있다면 영문 키워드로 적어주세요. 비워두시면 본문 내용에 맞춰 AI가 알아서 검색해 옵니다.")
+    pre_thumb_kw = st.text_input("대표 사진 검색어", placeholder="예: costco grocery / winter tire car / highway alberta")
+    pre_body_kw = st.text_input("본문 사진 검색어", placeholder="예: supermarket shopping / car repair mechanic / living room rent")
+
 col_ask, col_direct = st.columns(2)
 
 with col_ask:
@@ -159,7 +165,9 @@ with col_ask:
                             "category": category,
                             "topic": topic,
                             "initial_exp": initial_exp,
-                            "ref_data": ref_data
+                            "ref_data": ref_data,
+                            "pre_thumb_kw": pre_thumb_kw.strip(),
+                            "pre_body_kw": pre_body_kw.strip()
                         }
                         st.session_state.post_data = None
                         st.rerun()
@@ -173,7 +181,9 @@ with col_direct:
             "category": category,
             "topic": topic,
             "initial_exp": initial_exp,
-            "ref_data": ref_data
+            "ref_data": ref_data,
+            "pre_thumb_kw": pre_thumb_kw.strip(),
+            "pre_body_kw": pre_body_kw.strip()
         }
         st.rerun()
 
@@ -241,6 +251,7 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                     thumb_kw = "canada daily life"
                     body_kw = "lifestyle living"
 
+                    # 태그 및 이미지 키워드 추출
                     if "TAGS:" in main_content:
                         split_body, tail = main_content.rsplit("TAGS:", 1)
                         final_body = split_body.strip()
@@ -265,6 +276,12 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
 
                     if not final_body:
                         final_body = full_text
+
+                    # 사용자가 1단계에서 직접 입력한 검색어가 있으면 AI 추천값 대신 최우선 적용
+                    if saved.get("pre_thumb_kw"):
+                        thumb_kw = saved["pre_thumb_kw"]
+                    if saved.get("pre_body_kw"):
+                        body_kw = saved["pre_body_kw"]
 
                     thumb_url = get_unsplash_photo(thumb_kw, page=1)
                     body_url = get_unsplash_photo(body_kw, page=1)
@@ -300,14 +317,12 @@ if st.session_state.post_data:
         st.markdown("**1. 대표 사진**")
         st.image(st.session_state.post_data["thumb_url"], use_container_width=True)
         
-        # 폰 사진 직접 업로드 (가장 확실함)
         uploaded_thumb = st.file_uploader("📸 내 폰 사진으로 넣기 (대표)", type=["jpg", "jpeg", "png", "webp"], key="upload_thumb")
         if uploaded_thumb is not None:
             st.session_state.post_data["thumb_url"] = file_to_base64_src(uploaded_thumb)
             st.success("대표 사진이 내 사진으로 교체되었습니다!")
             st.rerun()
 
-        # 스톡 검색어 직접 수정 및 넘기기
         new_thumb_kw = st.text_input("스톡 사진 검색어(영문)", value=st.session_state.post_data["thumb_kw"], key="kw_thumb")
         subcol1, subcol2 = st.columns(2)
         with subcol1:
@@ -329,14 +344,12 @@ if st.session_state.post_data:
         st.markdown("**2. 본문 사진**")
         st.image(st.session_state.post_data["body_url"], use_container_width=True)
 
-        # 폰 사진 직접 업로드 (가장 확실함)
         uploaded_body = st.file_uploader("📸 내 폰 사진으로 넣기 (본문)", type=["jpg", "jpeg", "png", "webp"], key="upload_body")
         if uploaded_body is not None:
             st.session_state.post_data["body_url"] = file_to_base64_src(uploaded_body)
             st.success("본문 사진이 내 사진으로 교체되었습니다!")
             st.rerun()
 
-        # 스톡 검색어 직접 수정 및 넘기기
         new_body_kw = st.text_input("스톡 사진 검색어(영문)", value=st.session_state.post_data["body_kw"], key="kw_body")
         subcol3, subcol4 = st.columns(2)
         with subcol3:

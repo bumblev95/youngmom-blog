@@ -4,6 +4,7 @@ import requests
 import smtplib
 import random
 import time
+import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -71,6 +72,12 @@ def get_unsplash_photo(query_keyword, page=1):
         pass
     fallback_seed = random.randint(1, 100)
     return f"https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=800&q=80&sig={fallback_seed}"
+
+def file_to_base64_src(uploaded_file):
+    bytes_data = uploaded_file.getvalue()
+    b64_str = base64.b64encode(bytes_data).decode()
+    mime = uploaded_file.type or "image/jpeg"
+    return f"data:{mime};base64,{b64_str}"
 
 client = genai.Client(api_key=api_key)
 
@@ -234,7 +241,6 @@ if st.session_state.interview_questions is not None and not st.session_state.pos
                     thumb_kw = "canada daily life"
                     body_kw = "lifestyle living"
 
-                    # 태그 및 이미지 키워드 추출
                     if "TAGS:" in main_content:
                         split_body, tail = main_content.rsplit("TAGS:", 1)
                         final_body = split_body.strip()
@@ -287,29 +293,68 @@ if st.session_state.post_data:
 
     reviewed_title = st.text_input("블로그 제목", value=st.session_state.post_data["title"])
 
-    st.markdown("##### 🖼️ 삽입될 고화질 사진")
+    st.markdown("##### 🖼️ 삽입될 사진 관리 (내 폰 사진 올리기 또는 검색)")
     col1, col2 = st.columns(2)
+
     with col1:
-        st.caption(f"1. 대표 사진 ({st.session_state.post_data['thumb_kw']})")
+        st.markdown("**1. 대표 사진**")
         st.image(st.session_state.post_data["thumb_url"], use_container_width=True)
-        if st.button("🔄 대표 사진 변경", key="regen_thumb"):
-            st.session_state.post_data["thumb_page"] += 1
-            st.session_state.post_data["thumb_url"] = get_unsplash_photo(
-                st.session_state.post_data["thumb_kw"], 
-                page=st.session_state.post_data["thumb_page"]
-            )
+        
+        # 폰 사진 직접 업로드 (가장 확실함)
+        uploaded_thumb = st.file_uploader("📸 내 폰 사진으로 넣기 (대표)", type=["jpg", "jpeg", "png", "webp"], key="upload_thumb")
+        if uploaded_thumb is not None:
+            st.session_state.post_data["thumb_url"] = file_to_base64_src(uploaded_thumb)
+            st.success("대표 사진이 내 사진으로 교체되었습니다!")
             st.rerun()
 
+        # 스톡 검색어 직접 수정 및 넘기기
+        new_thumb_kw = st.text_input("스톡 사진 검색어(영문)", value=st.session_state.post_data["thumb_kw"], key="kw_thumb")
+        subcol1, subcol2 = st.columns(2)
+        with subcol1:
+            if st.button("🔍 검색", key="search_thumb"):
+                st.session_state.post_data["thumb_kw"] = new_thumb_kw
+                st.session_state.post_data["thumb_page"] = 1
+                st.session_state.post_data["thumb_url"] = get_unsplash_photo(new_thumb_kw, page=1)
+                st.rerun()
+        with subcol2:
+            if st.button("🔄 다음 사진", key="next_thumb"):
+                st.session_state.post_data["thumb_page"] += 1
+                st.session_state.post_data["thumb_url"] = get_unsplash_photo(
+                    st.session_state.post_data["thumb_kw"], 
+                    page=st.session_state.post_data["thumb_page"]
+                )
+                st.rerun()
+
     with col2:
-        st.caption(f"2. 본문 사진 ({st.session_state.post_data['body_kw']})")
+        st.markdown("**2. 본문 사진**")
         st.image(st.session_state.post_data["body_url"], use_container_width=True)
-        if st.button("🔄 본문 사진 변경", key="regen_body"):
-            st.session_state.post_data["body_page"] += 1
-            st.session_state.post_data["body_url"] = get_unsplash_photo(
-                st.session_state.post_data["body_kw"], 
-                page=st.session_state.post_data["body_page"]
-            )
+
+        # 폰 사진 직접 업로드 (가장 확실함)
+        uploaded_body = st.file_uploader("📸 내 폰 사진으로 넣기 (본문)", type=["jpg", "jpeg", "png", "webp"], key="upload_body")
+        if uploaded_body is not None:
+            st.session_state.post_data["body_url"] = file_to_base64_src(uploaded_body)
+            st.success("본문 사진이 내 사진으로 교체되었습니다!")
             st.rerun()
+
+        # 스톡 검색어 직접 수정 및 넘기기
+        new_body_kw = st.text_input("스톡 사진 검색어(영문)", value=st.session_state.post_data["body_kw"], key="kw_body")
+        subcol3, subcol4 = st.columns(2)
+        with subcol3:
+            if st.button("🔍 검색", key="search_body"):
+                st.session_state.post_data["body_kw"] = new_body_kw
+                st.session_state.post_data["body_page"] = 1
+                st.session_state.post_data["body_url"] = get_unsplash_photo(new_body_kw, page=1)
+                st.rerun()
+        with subcol4:
+            if st.button("🔄 다음 사진", key="next_body"):
+                st.session_state.post_data["body_page"] += 1
+                st.session_state.post_data["body_url"] = get_unsplash_photo(
+                    st.session_state.post_data["body_kw"], 
+                    page=st.session_state.post_data["body_page"]
+                )
+                st.rerun()
+
+    st.markdown("---")
 
     if st.button("➕ 본문 살 붙여서 더 길게 늘리기 (실전 팁 & Q&A 추가)", use_container_width=True):
         if enforce_cooldown(12):
@@ -345,7 +390,6 @@ if st.session_state.post_data:
 
     reviewed_body = st.text_area("본문 내용", value=st.session_state.post_data["body"], height=380)
 
-    # 추천 태그 입력 및 확인 칸
     reviewed_tags = st.text_input("🏷️ 추천 태그 (쉼표로 구분되어 글 맨 아래에 자동 첨부됩니다)", value=st.session_state.post_data.get("tags", "캐나다생활, 알버타살림, 캐나다이민"))
 
     thumb_url = st.session_state.post_data["thumb_url"]
@@ -357,7 +401,6 @@ if st.session_state.post_data:
     else:
         html_body_text = reviewed_body + body_img_html
 
-    # 해시태그 HTML 생성
     tag_list = [t.strip() for t in reviewed_tags.split(",") if t.strip()]
     hashtags_html = " ".join([f"#{t.replace('#', '')}" for t in tag_list])
     tag_footer = f'<p style="margin-top:35px; color:#666; font-size:14px;"><b>태그:</b> {hashtags_html}</p>'
